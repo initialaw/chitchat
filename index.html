@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,7 +12,6 @@
         height: 100%;
         font-family: "Segoe UI", Tahoma, sans-serif;
         background: #ffffff;
-        overflow: hidden;
         display: flex;
         flex-direction: column;
       }
@@ -68,7 +67,7 @@
         display: flex;
         flex-direction: column;
         align-self: flex-start;
-        animation: fadeIn 0.2s ease;
+        transition: background-color 1s linear, opacity 1s linear;
       }
 
       .message.own {
@@ -83,37 +82,6 @@
         margin-bottom: 3px;
         font-size: 0.7rem;
         font-weight: 600;
-      }
-
-      .message.own .message-header {
-        flex-direction: row-reverse;
-        justify-content: flex-end;
-      }
-
-      .progress-circle {
-        width: 14px;
-        height: 14px;
-        flex-shrink: 0;
-      }
-
-      svg {
-        transform: rotate(-90deg);
-        width: 14px;
-        height: 14px;
-      }
-
-      circle.background {
-        fill: none;
-        stroke: #ddd;
-        stroke-width: 2;
-      }
-
-      circle.progress {
-        fill: none;
-        stroke: #007bff;
-        stroke-width: 2;
-        stroke-linecap: round;
-        transition: stroke-dashoffset 1s linear;
       }
 
       .text {
@@ -150,17 +118,6 @@
         font-size: 1rem;
         cursor: pointer;
       }
-
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-          transform: translateY(5px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
     </style>
   </head>
   <body>
@@ -180,7 +137,6 @@
         required
         autocomplete="off"
       />
-
       <button type="submit">Kirim</button>
     </form>
 
@@ -190,6 +146,7 @@
 
     <script>
       //Dibuat oleh Initial A dengan bantuan teknologi canggih.
+
       const firebaseConfig = {
         apiKey: "AIzaSyCATKvym_e5KqLPTD4kT_moXbOdMxdvCzU",
         authDomain: "chatbanyakan.firebaseapp.com",
@@ -202,10 +159,23 @@
       firebase.initializeApp(firebaseConfig);
       const db = firebase.database();
 
+      function generateUsername() {
+        return "Sender" + Math.floor(100000 + Math.random() * 900000);
+      }
+
       let username = localStorage.getItem("chatUsername");
-      if (!username) {
-        username = "Sender" + Math.floor(Math.random() * 9000 + 1000);
+      let lastUpdated = parseInt(
+        localStorage.getItem("usernameLastUpdated"),
+        10
+      );
+
+      const now = Date.now();
+      const oneHour = 3600000;
+
+      if (!username || !lastUpdated || now - lastUpdated > oneHour) {
+        username = generateUsername();
         localStorage.setItem("chatUsername", username);
+        localStorage.setItem("usernameLastUpdated", now.toString());
       }
 
       let userId = localStorage.getItem("chatUserId");
@@ -237,28 +207,20 @@
         return `hsl(${h}, 70%, 85%)`;
       }
 
-      function createProgressCircle() {
-        const svgNS = "http://www.w3.org/2000/svg";
-        const svg = document.createElementNS(svgNS, "svg");
-        svg.setAttribute("viewBox", "0 0 36 36");
+      function interpolateColor(start, end, factor) {
+        const parseColor = (hex) =>
+          hex
+            .replace("#", "")
+            .match(/.{2}/g)
+            .map((x) => parseInt(x, 16));
+        const [r1, g1, b1] = parseColor(start);
+        const [r2, g2, b2] = parseColor(end);
 
-        const bg = document.createElementNS(svgNS, "circle");
-        bg.classList.add("background");
-        bg.setAttribute("cx", 18);
-        bg.setAttribute("cy", 18);
-        bg.setAttribute("r", 15);
-        svg.appendChild(bg);
+        const r = Math.round(r1 + (r2 - r1) * factor);
+        const g = Math.round(g1 + (g2 - g1) * factor);
+        const b = Math.round(b1 + (b2 - b1) * factor);
 
-        const progress = document.createElementNS(svgNS, "circle");
-        progress.classList.add("progress");
-        progress.setAttribute("cx", 18);
-        progress.setAttribute("cy", 18);
-        progress.setAttribute("r", 15);
-        progress.setAttribute("stroke-dasharray", 94.2);
-        progress.setAttribute("stroke-dashoffset", 0);
-        svg.appendChild(progress);
-
-        return { svg, progress };
+        return `rgb(${r}, ${g}, ${b})`;
       }
 
       function createMessageElement(id, usernameMsg, text, timestamp, isOwn) {
@@ -270,16 +232,10 @@
         const headerDiv = document.createElement("div");
         headerDiv.classList.add("message-header");
 
-        const progressContainer = document.createElement("div");
-        progressContainer.classList.add("progress-circle");
-        const { svg, progress } = createProgressCircle();
-        progressContainer.appendChild(svg);
-
         const nameSpan = document.createElement("span");
         nameSpan.textContent = usernameMsg;
         nameSpan.classList.add("username");
 
-        headerDiv.appendChild(progressContainer);
         headerDiv.appendChild(nameSpan);
 
         const textSpan = document.createElement("span");
@@ -289,32 +245,41 @@
         msgDiv.appendChild(headerDiv);
         msgDiv.appendChild(textSpan);
 
-        if (!isOwn) {
-          msgDiv.style.backgroundColor = stringToColor(usernameMsg);
-        }
+        const startColor = isOwn ? "#dcf8c6" : stringToColor(usernameMsg);
+        const endColor = "#ffffff";
+        const totalDuration = 180000;
+        const startTime = timestamp;
 
-        const expireAt = timestamp + 180000;
-        const circleLen = 2 * Math.PI * 15;
-        function updateProgress() {
+        msgDiv.style.backgroundColor = startColor;
+        msgDiv.style.opacity = 1;
+
+        const fadeInterval = setInterval(() => {
           const now = Date.now();
-          const left = Math.max(0, expireAt - now);
-          const dashoffset = circleLen * (1 - left / 180000);
-          progress.style.strokeDashoffset = dashoffset;
-          if (left <= 0) {
-            clearInterval(timer);
+          const elapsed = now - startTime;
+          const t = Math.min(1, elapsed / totalDuration);
+
+          msgDiv.style.backgroundColor = interpolateColor(
+            startColor,
+            endColor,
+            t
+          );
+          msgDiv.style.opacity = (1 - t).toFixed(2);
+
+          if (t >= 1) {
+            clearInterval(fadeInterval);
             msgDiv.remove();
             db.ref("messages/" + id).remove();
           }
-        }
-        const timer = setInterval(updateProgress, 1000);
-        updateProgress();
+        }, 100);
 
         return msgDiv;
       }
 
       const messagesRef = db.ref("messages");
+
       messagesRef.on("child_added", (snap) => {
         const data = snap.val();
+        if (!data.timestamp) return;
         const isOwn = data.username === username;
         const msgElem = createMessageElement(
           snap.key,
@@ -336,25 +301,14 @@
         e.preventDefault();
         const text = msgInput.value.trim();
         if (!text) return;
-        messagesRef.push().set({
+        const newMsgRef = messagesRef.push();
+        newMsgRef.set({
           username,
           text,
-          timestamp: Date.now(),
+          timestamp: firebase.database.ServerValue.TIMESTAMP,
         });
         msgInput.value = "";
       });
-
-      setInterval(() => {
-        const now = Date.now();
-        messagesRef.once("value", (snap) => {
-          snap.forEach((child) => {
-            const msg = child.val();
-            if (now - msg.timestamp > 180000) {
-              messagesRef.child(child.key).remove();
-            }
-          });
-        });
-      }, 30000);
       //xaxwxhxoxlxixcxexrxsx
     </script>
   </body>
