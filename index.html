@@ -140,13 +140,17 @@
       <button type="submit">Kirim</button>
     </form>
 
-    <!-- Firebase -->
+    <audio
+      id="notifSound"
+      src="https://www.myinstants.com/media/sounds/cihuyy-wielino-ino_kO92s4H.mp3"
+      preload="auto"
+    ></audio>
+
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
     <script>
       //Dibuat oleh Initial A dengan bantuan teknologi canggih.
-
       const firebaseConfig = {
         apiKey: "AIzaSyCATKvym_e5KqLPTD4kT_moXbOdMxdvCzU",
         authDomain: "chatbanyakan.firebaseapp.com",
@@ -168,7 +172,6 @@
         localStorage.getItem("usernameLastUpdated"),
         10
       );
-
       const now = Date.now();
       const oneHour = 3600000;
 
@@ -189,10 +192,24 @@
       onlineRef.set({ username, onlineAt: Date.now() });
       onlineRef.onDisconnect().remove();
 
+      let previousUserCount = 0;
+
       db.ref("onlineUsers").on("value", (snapshot) => {
         const users = snapshot.val() || {};
-        userCountSpan.textContent = Object.keys(users).length;
+        const currentCount = Object.keys(users).length;
+        userCountSpan.textContent = currentCount;
+
+        if (previousUserCount && currentCount > previousUserCount) {
+          playNotifSound();
+        }
+
+        previousUserCount = currentCount;
       });
+
+      function playNotifSound() {
+        const sound = document.getElementById("notifSound");
+        if (sound) sound.play().catch(() => {});
+      }
 
       const chatDiv = document.getElementById("chat");
       const inputForm = document.getElementById("inputForm");
@@ -290,6 +307,10 @@
         );
         chatDiv.appendChild(msgElem);
         chatDiv.scrollTop = chatDiv.scrollHeight;
+
+        if (!isOwn) {
+          playNotifSound();
+        }
       });
 
       messagesRef.on("child_removed", (snap) => {
